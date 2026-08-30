@@ -1,6 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import CreateReleaseForm from './CreateReleaseForm.jsx'
 import ReleaseDetails from './ReleaseDetails.jsx'
+import {
+  createRelease,
+  getReleases,
+  updateReleaseAdditionalInfo,
+  updateReleaseChecklist,
+} from './api.js'
 
 const checklistSteps = [
   { id: 'confirm-scope', label: 'Confirm the release scope' },
@@ -11,30 +17,6 @@ const checklistSteps = [
   { id: 'verify-config', label: 'Verify production configuration' },
   { id: 'create-build', label: 'Create the production build' },
   { id: 'deploy-monitor', label: 'Deploy and monitor the release' },
-]
-
-const initialReleases = [
-  {
-    id: 1,
-    name: 'Mobile app 3.8.0',
-    dueDate: '2026-09-02T09:00:00',
-    additionalInfo: 'Coordinate the rollout with the mobile support team.',
-    completedSteps: ['confirm-scope', 'review-code', 'run-tests'],
-  },
-  {
-    id: 2,
-    name: 'September website update',
-    dueDate: '2026-09-05T14:30:00',
-    additionalInfo: '',
-    completedSteps: [],
-  },
-  {
-    id: 3,
-    name: 'API version 2.4',
-    dueDate: '2026-09-12T11:00:00',
-    additionalInfo: 'Notify API consumers after the deployment is verified.',
-    completedSteps: checklistSteps.map((step) => step.id),
-  },
 ]
 
 const statusStyles = {
@@ -48,64 +30,83 @@ const dateFormatter = new Intl.DateTimeFormat('en', {
   timeStyle: 'short',
 })
 
-function calculateStatus(completedSteps) {
-  if (completedSteps.length === 0) {
-    return 'planned'
-  }
-
-  if (completedSteps.length === checklistSteps.length) {
-    return 'done'
-  }
-
-  return 'ongoing'
-}
-
 function App() {
-  const [releases, setReleases] = useState(initialReleases)
-  const [selectedReleaseId, setSelectedReleaseId] = useState(
-    initialReleases[0].id,
-  )
+  const [releases, setReleases] = useState([])
+  const [selectedReleaseId, setSelectedReleaseId] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
 
   const selectedRelease = releases.find(
     (release) => release.id === selectedReleaseId,
   )
 
-  function handleCreateRelease(releaseDetails) {
-    const newRelease = {
-      id: crypto.randomUUID(),
-      ...releaseDetails,
-      completedSteps: [],
+  useEffect(() => {
+    async function loadReleases() {
+      try {
+        const loadedReleases = await getReleases()
+        setReleases(loadedReleases)
+        setSelectedReleaseId(loadedReleases[0]?.id || null)
+      } catch (requestError) {
+        setError(requestError.message)
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    setReleases((currentReleases) => [newRelease, ...currentReleases])
-    setSelectedReleaseId(newRelease.id)
+    loadReleases()
+  }, [])
+
+  async function handleCreateRelease(releaseDetails) {
+    setError('')
+
+    try {
+      const newRelease = await createRelease(releaseDetails)
+      setReleases((currentReleases) => [newRelease, ...currentReleases])
+      setSelectedReleaseId(newRelease.id)
+    } catch (requestError) {
+      setError(requestError.message)
+      throw requestError
+    }
   }
 
-  function handleToggleStep(releaseId, stepId) {
-    setReleases((currentReleases) =>
-      currentReleases.map((release) => {
-        if (release.id !== releaseId) {
-          return release
-        }
+  async function handleToggleStep(releaseId, stepId) {
+    const release = releases.find((item) => item.id === releaseId)
+    const completed = !release.completedSteps.includes(stepId)
+    setError('')
 
-        const isCompleted = release.completedSteps.includes(stepId)
-        const completedSteps = isCompleted
-          ? release.completedSteps.filter((id) => id !== stepId)
-          : [...release.completedSteps, stepId]
-
-        return { ...release, completedSteps }
-      }),
-    )
+    try {
+      const updatedRelease = await updateReleaseChecklist(
+        releaseId,
+        stepId,
+        completed,
+      )
+      setReleases((currentReleases) =>
+        currentReleases.map((item) =>
+          item.id === releaseId ? updatedRelease : item,
+        ),
+      )
+    } catch (requestError) {
+      setError(requestError.message)
+    }
   }
 
-  function handleUpdateAdditionalInfo(releaseId, additionalInfo) {
-    setReleases((currentReleases) =>
-      currentReleases.map((release) =>
-        release.id === releaseId
-          ? { ...release, additionalInfo }
-          : release,
-      ),
-    )
+  async function handleUpdateAdditionalInfo(releaseId, additionalInfo) {
+    setError('')
+
+    try {
+      const updatedRelease = await updateReleaseAdditionalInfo(
+        releaseId,
+        additionalInfo,
+      )
+      setReleases((currentReleases) =>
+        currentReleases.map((release) =>
+          release.id === releaseId ? updatedRelease : release,
+        ),
+      )
+    } catch (requestError) {
+      setError(requestError.message)
+      throw requestError
+    }
   }
 
   return (
@@ -123,6 +124,12 @@ function App() {
           </p>
         </header>
 
+        {error && (
+          <p className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+            {error}
+          </p>
+        )}
+
         <CreateReleaseForm onCreate={handleCreateRelease} />
 
         <section className="mt-12" aria-labelledby="releases-heading">
@@ -137,9 +144,16 @@ function App() {
             </div>
           </div>
 
+          {isLoading && <p className="mt-6 text-slate-500">Loading releases...</p>}
+
+          {!isLoading && releases.length === 0 && (
+            <p className="mt-6 rounded-lg border border-dashed border-slate-300 p-6 text-slate-500">
+              No releases yet. Create the first one above.
+            </p>
+          )}
+
           <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {releases.map((release) => {
-              const status = calculateStatus(release.completedSteps)
               const isSelected = release.id === selectedReleaseId
 
               return (
@@ -154,9 +168,9 @@ function App() {
                   <div className="flex items-start justify-between gap-4">
                     <h3 className="text-lg font-semibold">{release.name}</h3>
                     <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusStyles[status]}`}
+                      className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusStyles[release.status]}`}
                     >
-                      {status}
+                      {release.status}
                     </span>
                   </div>
 
@@ -187,9 +201,10 @@ function App() {
 
         {selectedRelease && (
           <ReleaseDetails
+            key={selectedRelease.id}
             release={selectedRelease}
             steps={checklistSteps}
-            status={calculateStatus(selectedRelease.completedSteps)}
+            status={selectedRelease.status}
             onToggleStep={handleToggleStep}
             onUpdateAdditionalInfo={handleUpdateAdditionalInfo}
           />

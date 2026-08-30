@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const dateFormatter = new Intl.DateTimeFormat('en', {
   dateStyle: 'medium',
   timeStyle: 'short',
@@ -10,6 +12,24 @@ function ReleaseDetails({
   onToggleStep,
   onUpdateAdditionalInfo,
 }) {
+  const [additionalInfo, setAdditionalInfo] = useState(
+    release.additionalInfo || '',
+  )
+  const [isSaving, setIsSaving] = useState(false)
+
+  async function handleSave(event) {
+    event.preventDefault()
+    setIsSaving(true)
+
+    try {
+      await onUpdateAdditionalInfo(release.id, additionalInfo)
+    } catch {
+      // App displays the API error.
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <section
       id="release-details"
@@ -69,7 +89,7 @@ function ReleaseDetails({
           </div>
         </div>
 
-        <div>
+        <form onSubmit={handleSave}>
           <label
             className="text-lg font-semibold text-slate-900"
             htmlFor="release-additional-info"
@@ -82,13 +102,18 @@ function ReleaseDetails({
           <textarea
             className="mt-4 min-h-40 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             id="release-additional-info"
-            value={release.additionalInfo}
-            onChange={(event) =>
-              onUpdateAdditionalInfo(release.id, event.target.value)
-            }
+            value={additionalInfo}
+            onChange={(event) => setAdditionalInfo(event.target.value)}
             placeholder="No additional information yet."
           />
-        </div>
+          <button
+            className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            type="submit"
+            disabled={isSaving}
+          >
+            {isSaving ? 'Saving...' : 'Save information'}
+          </button>
+        </form>
       </div>
     </section>
   )

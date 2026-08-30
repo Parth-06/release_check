@@ -4,23 +4,32 @@ function CreateReleaseForm({ onCreate }) {
   const [name, setName] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [additionalInfo, setAdditionalInfo] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
 
     if (!name.trim()) {
       return
     }
 
-    onCreate({
-      name: name.trim(),
-      dueDate,
-      additionalInfo: additionalInfo.trim(),
-    })
+    setIsSubmitting(true)
 
-    setName('')
-    setDueDate('')
-    setAdditionalInfo('')
+    try {
+      await onCreate({
+        name: name.trim(),
+        dueDate,
+        additionalInfo: additionalInfo.trim(),
+      })
+
+      setName('')
+      setDueDate('')
+      setAdditionalInfo('')
+    } catch {
+      // App displays the API error.
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -90,10 +99,11 @@ function CreateReleaseForm({ onCreate }) {
 
         <div>
           <button
-            className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             type="submit"
+            disabled={isSubmitting}
           >
-            Create release
+            {isSubmitting ? 'Creating...' : 'Create release'}
           </button>
         </div>
       </form>
