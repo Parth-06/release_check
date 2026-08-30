@@ -48,7 +48,7 @@ The frontend runs at `http://localhost:5173` and the API at `http://localhost:30
 
 ### Client
 
-- `VITE_API_URL`: API server origin; defaults to `http://localhost:3000` in development. Production uses the current site origin.
+- `VITE_API_URL`: API server origin. It defaults to `http://localhost:3000` in development. In production, set it to the Railway API origin without a trailing `/api`, for example `https://release-checklist.up.railway.app`.
 
 ## API endpoints
 
@@ -77,13 +77,46 @@ The `releases` table contains:
 | `created_at` | timestamp | Creation time |
 | `updated_at` | timestamp | Last update time |
 
-## Deploy to Render
+## Deployment
 
-The root `render.yaml` deploys the API and built SPA as one Render web service.
+The API is deployed to Railway, the frontend to Vercel, and PostgreSQL is hosted by Supabase.
 
-1. Push this repository to GitHub.
-2. In Render, select **New → Blueprint** and connect the repository.
-3. Enter the Supabase Session pooler connection string when Render requests `DATABASE_URL`.
-4. Deploy the Blueprint.
+### Railway API
 
-The build command installs both packages, generates Prisma Client, applies migrations, and builds the React application. Express serves both the SPA and API from the resulting Render URL.
+1. Create a Railway service from this GitHub repository.
+2. Set its root directory to `/server`.
+3. Configure the following commands:
+
+   ```text
+   Build: npm ci && npm run prisma:generate
+   Pre-deploy: npm run prisma:deploy
+   Start: npm start
+   Healthcheck path: /api/health
+   ```
+
+4. Add these service variables:
+
+   ```text
+   DATABASE_URL=<Supabase Session pooler connection string>
+   NODE_ENV=production
+   ```
+
+5. Deploy the service and generate a public Railway domain. Railway supplies `PORT` automatically.
+6. Verify `https://<railway-domain>/api/health` and `https://<railway-domain>/api/releases`.
+
+### Vercel frontend
+
+1. Create a Vercel project from the same GitHub repository.
+2. Set the root directory to `client` and use the Vite framework preset.
+3. Use `npm run build` as the build command and `dist` as the output directory.
+4. Add the following environment variable for Production and Preview:
+
+   ```text
+   VITE_API_URL=https://<railway-domain>
+   ```
+
+   Do not append `/api`; the client adds it automatically.
+
+5. Redeploy the Vercel project after adding or changing the environment variable.
+
+Do not expose `DATABASE_URL` to Vercel or commit production credentials to Git.
